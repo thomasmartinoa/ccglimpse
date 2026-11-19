@@ -1,0 +1,13 @@
+{
+  "name": "claude-wireframe",
+  "description": "See UI right in the terminal: sketches, mockups and live, clickable pages for Claude Code.",
+  "owner": {
+    "name": "thomasmartinoa"
+  },
+  "plugins": [
+    {
+      "name": "wireframe",
+      "source": "./"
+    }
+  ]
+}
