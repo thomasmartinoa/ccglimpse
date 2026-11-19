@@ -1,6 +1,6 @@
 {
   "name": "ccglimpse",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "CCGlimpse: see UI right in the terminal. HTML sketches and mockups drawn as real pictures in the chat, and live, clickable pages in a pane (kitty, Ghostty).",
   "author": {
     "name": "thomasmartinoa",
