@@ -4,14 +4,14 @@ import { mayRename, mergeEntry, titleOf } from './gallery'
 
 const output = (size: 'sketch' | 'full') =>
   'Rendered and shown to the user inline in the terminal. ' +
-  `PNG: /home/me/.cache/claude-wireframe/toolu_1.png (800x450, ${size}) from /home/me/.cache/claude-wireframe/pages/toolu_1.html`
+  `PNG: /home/me/.cache/ccglimpse/toolu_1.png (800x450, ${size}) from /home/me/.cache/ccglimpse/pages/toolu_1.html`
 
 const result = (size: 'sketch' | 'full') =>
   ({
-    plugin: 'wireframe',
+    plugin: 'ccglimpse',
     component: 'ToolResult',
     requestId: 'toolu_1',
-    props: { tool_use_id: 'toolu_1', tool: 'mcp__wireframe__preview', output: output(size), isErrored: false },
+    props: { tool_use_id: 'toolu_1', tool: 'mcp__ccglimpse__preview', output: output(size), isErrored: false },
   }) as const
 
 
@@ -59,9 +59,9 @@ test('other surfaces keep the engine text', async ($, on) => {
 
 test('the live pane says how to start when nothing is open', async ($) => {
   const ui = await $.ui.mount({
-    plugin: 'wireframe',
+    plugin: 'ccglimpse',
     component: 'Pane',
-    requestId: 'wireframe-live',
+    requestId: 'ccglimpse-live',
     surface: 'terminal',
     props: { title: 'Live preview', isFocused: false, bodyColumns: 80, placement: 'dock', scroll: { offset: 0, bodyRows: 30 }, view: {} },
   })
@@ -77,11 +77,12 @@ test('the gallery pane lists entries and shows the picked one', async ($, on) =>
   // Stand for the engine: HOME, mkdir and the gallery file.
   on('env.get', () => ({ value: '/home/me' }))
   on('process.run', () => ({ value: { exitCode: 0, stdout: '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }))
+  on('fs.stat', () => ({ value: { kind: 'file', size: 1, mtimeMs: 1, isLink: false } }))
   on('fs.read', () => ({ value: JSON.stringify(entries) }))
   const ui = await $.ui.mount({
-    plugin: 'wireframe',
+    plugin: 'ccglimpse',
     component: 'Pane',
-    requestId: 'wireframe-gallery',
+    requestId: 'ccglimpse-gallery',
     surface: 'terminal',
     props: { title: 'Gallery', isFocused: false, bodyColumns: 100, placement: 'dock', scroll: { offset: 0, bodyRows: 40 }, view: {} },
   })
@@ -99,9 +100,37 @@ test('the gallery pane lists entries and shows the picked one', async ($, on) =>
   await ui.unmount()
 })
 
+test('the gallery shows what another session added to the file', async ($, on) => {
+  const one = (id: string, title: string) => ({ id, kind: 'sketch', title, page: `/p/${id}.html`, cwd: '/proj', at: Date.now() })
+  // The file on disk, which "another session" changes halfway through.
+  let disk = JSON.stringify([one('m', 'Mine')])
+  let mtime = 10
+  on('env.get', () => ({ value: '/home/me' }))
+  on('process.run', () => ({ value: { exitCode: 0, stdout: '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }))
+  on('fs.stat', () => ({ value: { kind: 'file', size: disk.length, mtimeMs: mtime, isLink: false } }))
+  on('fs.read', () => ({ value: disk }))
+  const ui = await $.ui.mount({
+    plugin: 'ccglimpse',
+    component: 'Pane',
+    requestId: 'ccglimpse-gallery',
+    surface: 'terminal',
+    props: { title: 'Gallery', isFocused: false, bodyColumns: 100, placement: 'dock', scroll: { offset: 0, bodyRows: 40 }, view: {} },
+  })
+  await ui.press({ key: 'scope-all' })
+  expect(await ui.find({ type: 'Button', key: 'item-m' })).toBeDefined()
+  expect(await ui.find({ type: 'Button', key: 'item-o' })).toBeUndefined()
+  disk = JSON.stringify([one('o', 'From the other window'), one('m', 'Mine')])
+  mtime = 20
+  await ui.press({ key: 'scope-project' })
+  await ui.press({ key: 'scope-all' })
+  expect(await ui.find({ type: 'Button', key: 'item-o' })).toBeDefined()
+  expect(await ui.find({ type: 'Button', key: 'item-m' })).toBeDefined()
+  await ui.unmount()
+})
+
 const artifactRow = (input: Record<string, unknown>) =>
   ({
-    plugin: 'wireframe',
+    plugin: 'ccglimpse',
     component: 'ToolUse',
     requestId: 'toolu_2',
     surface: 'terminal',

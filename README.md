@@ -1,6 +1,6 @@
-# wireframe
+# CCGlimpse
 
-A Claude Code plugin that shows UI right in the terminal instead of ASCII sketches or a browser.
+Claude Code Glimpse: a Claude Code plugin that shows UI right in the terminal instead of ASCII sketches or a browser.
 
 - **Sketches and mockups as real pictures.** Claude writes HTML, a headless Chromium renders it, and the picture appears in the chat. `sketch` is small, about the room an ASCII sketch takes. `full` is as wide as the chat.
 - **Live, clickable pages in a pane.** A page opens in a pane beside the chat, and you click, type and scroll in it like in a browser. It reloads when its file changes, so you watch Claude's edits land. It also works with a dev server such as `http://localhost:5173`.
@@ -21,11 +21,11 @@ A Claude Code plugin that shows UI right in the terminal instead of ASCII sketch
 At a Claude Code prompt:
 
 ```
-/plugin marketplace add thomasmartinoa/claude-wireframe
-/plugin install wireframe@claude-wireframe
+/plugin marketplace add thomasmartinoa/ccglimpse
+/plugin install ccglimpse@ccglimpse
 ```
 
-From a local copy instead: `/plugin marketplace add /path/to/claude-wireframe`.
+From a local copy instead: `/plugin marketplace add /path/to/ccglimpse`.
 
 ## Use
 
@@ -58,13 +58,13 @@ In the gallery: the list is at the top (`this project` or `all`), with ↑ newer
 | `hooks/register.tsx` | Entry point: the two tools (`preview`, `live`), `/view`, the terminal-or-artifact rules Claude reads, and the drawing hooks |
 | `hooks/preview.ts` | Still pictures: `chromium --headless --screenshot`, and fitting the PNG to a box of cells |
 | `hooks/live.tsx` | The live pane: starts the helper, swaps new frames into the picture, sends clicks and keys on |
-| `hooks/gallery.ts` | The gallery list, kept in `~/.cache/claude-wireframe/gallery.json` |
+| `hooks/gallery.ts` | The gallery list, kept in `~/.cache/ccglimpse/gallery.json` |
 | `hooks/gallery-pane.tsx` | Draws the gallery pane |
 | `hooks/pointer.tsx` | An invisible region over the picture that catches clicks and keys |
 | `hooks/cells.ts` | Measures a terminal cell in pixels, so pictures keep their shape |
 | `runtime/live-helper.mjs` | A small Node program that drives a hidden Chromium over the DevTools protocol, writes each new frame as a PNG, and takes input on a Unix socket |
 
-Everything stays on your machine. Pictures, pages, the gallery and the browser's throwaway profile live in `~/.cache/claude-wireframe/`. The browser never uses your own profile or logins. The plugin itself sends nothing over the network; a page you open loads whatever that page loads.
+Everything stays on your machine. Pictures, pages, the gallery and the browser's throwaway profile live in `~/.cache/ccglimpse/`. Each session's live browser has its own folder under `live/`, so several sessions can run at once; folders of sessions that ended are cleared the next time a live pane opens. The browser never uses your own profile or logins. The plugin itself sends nothing over the network; a page you open loads whatever that page loads.
 
 ## Develop
 

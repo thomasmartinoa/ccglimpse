@@ -1,11 +1,11 @@
 {
-  "name": "wireframe",
+  "name": "ccglimpse",
   "version": "0.2.0",
-  "description": "See UI right in the terminal: HTML sketches and mockups drawn as real pictures in the chat, and live, clickable pages in a pane (kitty, Ghostty).",
+  "description": "CCGlimpse: see UI right in the terminal. HTML sketches and mockups drawn as real pictures in the chat, and live, clickable pages in a pane (kitty, Ghostty).",
   "author": {
     "name": "thomasmartinoa",
     "url": "https://github.com/thomasmartinoa"
   },
-  "repository": "https://github.com/thomasmartinoa/claude-wireframe",
+  "repository": "https://github.com/thomasmartinoa/ccglimpse",
   "types": "./types/index.d.ts"
 }

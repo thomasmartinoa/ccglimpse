@@ -1,18 +1,18 @@
-// The wireframe mod's type contract.
+// The CCGlimpse plugin's type contract.
 
 // The page the live pane shows: kept in the session's state so the pane can
 // come back after the mod reloads (an update, or an edit while developing).
-export type WireframeLive = { target: string; device: 'desktop' | 'tablet' | 'phone' }
+export type GlimpseLive = { target: string; device: 'desktop' | 'tablet' | 'phone' }
 
 declare module 'claude-code' {
   interface PluginState {
-    wireframe: { last: WireframeLive | null }
+    ccglimpse: { last: GlimpseLive | null }
   }
 
   // The inputs of the two tools this mod registers, so `e` is typed in their
   // tool.run hooks. They match PREVIEW_SCHEMA and LIVE_SCHEMA in register.tsx.
   interface McpToolInputs {
-    mcp__wireframe__preview: {
+    mcp__ccglimpse__preview: {
       html?: string
       file?: string
       title?: string
@@ -20,7 +20,7 @@ declare module 'claude-code' {
       width?: number
       height?: number
     }
-    mcp__wireframe__live: {
+    mcp__ccglimpse__live: {
       action?: 'open' | 'look' | 'gallery' | 'close'
       html?: string
       file?: string

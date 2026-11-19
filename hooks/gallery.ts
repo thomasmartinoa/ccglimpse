@@ -1,5 +1,5 @@
 // The gallery: everything shown with this plugin, kept across sessions in
-// ~/.cache/claude-wireframe/gallery.json, newest first.
+// ~/.cache/ccglimpse/gallery.json, newest first.
 
 import type { EngineInterface } from 'claude-code'
 
@@ -27,24 +27,48 @@ export type Entry = {
 
 const MAX_ENTRIES = 300
 
-let entries: Entry[] | undefined
-let file = ''
+// Several sessions can run at once, and they all keep one gallery file. So
+// this session's copy is only a cache: it is read again whenever the file
+// changed, and every change starts from the file as it is now.
+let entries: Entry[] = []
+let folder: string | undefined // where gallery.json is, once known
+let stamp = '' // the file's mtime and size when this session last read or wrote it
+
+const stampOf = (info: { mtimeMs: number; size: number }) => `${info.mtimeMs}:${info.size}`
 
 export async function loadGallery($: EngineInterface, dir: string): Promise<Entry[]> {
-  file = `${dir}/gallery.json`
-  if (entries !== undefined) return entries
+  folder = dir
+  const file = `${dir}/gallery.json`
+  const info = await $.fs.stat(file).catch(() => undefined)
+  if (info !== undefined && stampOf(info) === stamp) return entries
   try {
     const parsed: unknown = JSON.parse(await $.fs.read(file))
-    entries = Array.isArray(parsed) ? (parsed as Entry[]) : []
+    if (Array.isArray(parsed)) entries = parsed as Entry[]
+    stamp = info === undefined ? '' : stampOf(info)
   } catch {
-    entries = []
+    // No file yet: the gallery is empty. A file that does not parse is left
+    // alone, and this session keeps what it had.
+    if (info === undefined) entries = []
   }
   return entries
 }
 
-async function save($: EngineInterface) {
-  if (file === '' || entries === undefined) return
-  await $.fs.write(file, JSON.stringify(entries, null, 1))
+// Writes the whole list. It goes to a temporary file first and is then moved
+// into place, so another session never reads half of it.
+async function save($: EngineInterface, list: Entry[]) {
+  if (folder === undefined) return
+  entries = list.slice(0, MAX_ENTRIES)
+  const file = `${folder}/gallery.json`
+  const text = JSON.stringify(entries, null, 1)
+  const temporary = `${file}.${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}.tmp`
+  await $.fs.write(temporary, text)
+  const moved = await $.process.run(['mv', '-f', '--', temporary, file]).catch(() => undefined)
+  if (moved?.exitCode !== 0) {
+    await $.fs.write(file, text)
+    await $.process.run(['rm', '-f', '--', temporary]).catch(() => undefined)
+  }
+  const info = await $.fs.stat(file).catch(() => undefined)
+  stamp = info === undefined ? '' : stampOf(info)
 }
 
 export type NewEntry = Omit<Entry, 'id' | 'at'> & { id?: string }
@@ -70,22 +94,26 @@ export const mayRename = (entry: Entry, title: string) => entry.isNamed !== true
 export async function remember($: EngineInterface, dir: string, entry: NewEntry) {
   const list = await loadGallery($, dir)
   const merged = mergeEntry(list.find(one => one.page === entry.page), entry, Date.now())
-  entries = [merged, ...list.filter(one => one.id !== merged.id)].slice(0, MAX_ENTRIES)
-  await save($)
+  await save($, [merged, ...list.filter(one => one.id !== merged.id)])
   return merged
 }
 
 export async function updateEntry($: EngineInterface, id: string, change: Partial<Entry>) {
-  if (entries === undefined) return
-  const one = entries.find(entry => entry.id === id)
+  if (folder === undefined) return
+  const list = await loadGallery($, folder)
+  const one = list.find(entry => entry.id === id)
   if (one === undefined) return
+  // A live page's picture is refreshed every few seconds under the same name:
+  // the list itself only changes when its size or path does.
+  if (Object.entries(change).every(([key, value]) => one[key as keyof Entry] === value)) return
   Object.assign(one, change)
-  await save($)
+  await save($, list)
 }
 
 // The page's own title names an entry nobody named.
 export async function nameFromPage($: EngineInterface, id: string, title: string) {
-  const one = entries?.find(entry => entry.id === id)
+  if (folder === undefined) return
+  const one = (await loadGallery($, folder)).find(entry => entry.id === id)
   if (one === undefined || !mayRename(one, title)) return
   await updateEntry($, id, { title: title.trim() })
 }
@@ -94,8 +122,7 @@ export async function nameFromPage($: EngineInterface, id: string, title: string
 export async function forget($: EngineInterface, dir: string, id: string) {
   const list = await loadGallery($, dir)
   const one = list.find(entry => entry.id === id)
-  entries = list.filter(entry => entry.id !== id)
-  await save($)
+  await save($, list.filter(entry => entry.id !== id))
   const ours = [one?.png, one?.page].filter((path): path is string => typeof path === 'string' && path.startsWith(`${dir}/`))
   if (ours.length > 0) await $.process.run(['rm', '-f', '--', ...ours]).catch(() => undefined)
 }

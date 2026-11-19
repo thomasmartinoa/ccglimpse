@@ -1,4 +1,4 @@
-// Live preview helper for the wireframe mod.
+// Live preview helper for the CCGlimpse plugin.
 //
 // Runs one hidden Chromium, saves every new frame of the page as a PNG file,
 // and takes clicks, keys and scrolls from the mod over a Unix socket.
@@ -14,11 +14,16 @@
 //            POST /reload, /back, /forward
 //            GET  /state
 //
-// Usage: node live-helper.mjs --out=<folder> [--chrome=chromium]
+// Usage: node live-helper.mjs --out=<folder> [--chrome=chromium] [--sweep]
+//
+// Each session has its own <out> folder (frames, browser profile, socket), so
+// sessions running at once never touch each other's browser. --sweep removes
+// the folders next to <out> that were left by helpers that are gone.
 
-import { spawn } from 'node:child_process'
+import { execFileSync, spawn } from 'node:child_process'
 import { createServer } from 'node:http'
-import { mkdirSync, readdirSync, readlinkSync, rmSync, statSync, watch, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, readdirSync, readlinkSync, rmSync, statSync, watch, writeFileSync } from 'node:fs'
+import { hostname } from 'node:os'
 import { basename, dirname, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
@@ -43,21 +48,71 @@ const SOCKET = (() => {
   if (args.socket) return args.socket
   const inOut = join(OUT, 'helper.sock')
   if (Buffer.byteLength(inOut) < 100) return inOut
-  return join(process.env.XDG_RUNTIME_DIR || '/tmp', `claude-wireframe-${process.pid}.sock`)
+  return join(process.env.XDG_RUNTIME_DIR || '/tmp', `ccglimpse-${process.pid}.sock`)
 })()
 
 const say = line => process.stdout.write(`${line.replace(/\n/g, ' ')}\n`)
 
+// First of all, say this folder is in use, so a sweep by another session
+// leaves it alone.
 mkdirSync(FRAMES, { recursive: true, mode: 0o700 })
+writeFileSync(join(OUT, 'helper.pid'), String(process.pid))
 for (const name of readdirSync(FRAMES)) rmSync(join(FRAMES, name), { force: true })
 rmSync(SOCKET, { force: true })
 
-// A browser left over from a helper that was killed hard still holds the
-// profile. Its lock names it as "<host>-<pid>": stop it first.
-try {
-  const pid = Number(readlinkSync(join(PROFILE, 'SingletonLock')).split('-').pop())
-  if (pid > 1) process.kill(pid, 'SIGKILL')
-} catch {}
+// The command line of a running process, or '' when there is none.
+function commandOf(pid) {
+  if (!(pid > 1)) return ''
+  try {
+    return execFileSync('ps', ['-p', String(pid), '-o', 'command='], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim()
+  } catch {
+    return ''
+  }
+}
+
+// Waits, up to `ms`, for a process to be gone.
+function waitGone(pid, ms) {
+  const until = Date.now() + ms
+  while (commandOf(pid) !== '' && Date.now() < until) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 50)
+}
+
+// A browser left over from a helper that was killed hard still holds its
+// profile. The profile's lock names it as "<host>-<pid>". Stop it, but only
+// when that process really is a browser using this profile, and wait until
+// it is gone, since it keeps writing to the profile while it stops.
+function stopLeftoverBrowser(profile) {
+  try {
+    const lock = readlinkSync(join(profile, 'SingletonLock'))
+    const cut = lock.lastIndexOf('-')
+    const pid = Number(lock.slice(cut + 1))
+    if (lock.slice(0, cut) !== hostname() || !commandOf(pid).includes(profile)) return
+    process.kill(pid, 'SIGKILL')
+    waitGone(pid, 3000)
+  } catch {}
+}
+
+// Removes the folders next to ours whose helper is gone: a closed session, a
+// crash. A folder whose helper.pid is missing is only removed once it is an
+// hour old, in case its helper is starting right now. It runs once this
+// helper is ready, so it never holds up the start.
+function sweep(parent) {
+  let names = []
+  try { names = readdirSync(parent, { withFileTypes: true }) } catch { return }
+  for (const one of names) {
+    const folder = join(parent, one.name)
+    if (folder === OUT || !one.isDirectory()) continue
+    try {
+      let pid = 0
+      try { pid = Number(readFileSync(join(folder, 'helper.pid'), 'utf8')) } catch {}
+      if (pid > 1 && commandOf(pid).includes(folder)) continue
+      if (!(pid > 1) && Date.now() - statSync(folder).mtimeMs < 3600_000) continue
+      stopLeftoverBrowser(join(folder, 'profile'))
+      rmSync(folder, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 })
+    } catch {}
+  }
+}
+
+stopLeftoverBrowser(PROFILE)
 
 // ---- Step 1: start Chromium and connect to its page -----------------------
 
@@ -368,4 +423,7 @@ const server = createServer(async (request, response) => {
   }
 })
 
-server.listen(SOCKET, () => say(`ready ${SOCKET}`))
+server.listen(SOCKET, () => {
+  say(`ready ${SOCKET}`)
+  if ('sweep' in args) setTimeout(() => sweep(dirname(OUT)), 100)
+})

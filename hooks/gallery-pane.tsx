@@ -14,7 +14,7 @@ import type { Cell } from './cells'
 import { timeAgo, type Entry } from './gallery'
 import { fitToCells } from './preview'
 
-export const GALLERY = 'wireframe-gallery'
+export const GALLERY = 'ccglimpse-gallery'
 
 export type GalleryView = { picked?: string; page: number; isAll: boolean }
 

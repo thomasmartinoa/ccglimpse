@@ -1,9 +1,9 @@
-// wireframe: see UI right in the terminal.
+// CCGlimpse: see UI right in the terminal.
 //
-//   mcp__wireframe__preview   HTML -> a still picture in the chat
+//   mcp__ccglimpse__preview   HTML -> a still picture in the chat
 //                             (size "sketch": small, the room of an ASCII sketch;
 //                              size "full": as wide as the chat)
-//   mcp__wireframe__live      a live, clickable page in a pane beside the chat,
+//   mcp__ccglimpse__live      a live, clickable page in a pane beside the chat,
 //                             and the gallery of everything shown so far
 //   /view                     the gallery; /view <file|url> [device] the live pane
 //
@@ -13,7 +13,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import type { WireframeLive } from '../types'
+import type { GlimpseLive } from '../types'
 import { FALLBACK_CELL, measureCell, type Cell } from './cells'
 import { forget, loadGallery, remember, titleOf, updateEntry, type Entry, type EntryKind } from './gallery'
 import { drawGallery, GALLERY, type GalleryView } from './gallery-pane'
@@ -37,8 +37,8 @@ import {
 } from './live'
 import { clampNumber, findBrowser, fitToCells, readShot, resultLine, roomFor, screenshot, type Size } from './preview'
 
-const PREVIEW = 'mcp__wireframe__preview'
-const LIVE = 'mcp__wireframe__live'
+const PREVIEW = 'mcp__ccglimpse__preview'
+const LIVE = 'mcp__ccglimpse__live'
 
 // claude.ai artifact links, and claude.ai itself.
 const ARTIFACT_LINK = /https:\/\/claude\.ai\/(?:code\/)?artifact\/[\w-]+/
@@ -46,7 +46,7 @@ const CLAUDE_AI = /^https?:\/\/([\w-]+\.)*claude\.ai(\/|$)/i
 
 // ---- What Claude reads ------------------------------------------------------
 
-const ROUTING = `# Showing UI to the user (wireframe plugin)
+const ROUTING = `# Showing UI to the user (CCGlimpse plugin)
 
 The user's terminal shows real pictures (kitty graphics), and they want to SEE layouts, not read drawings made of characters.
 
@@ -120,15 +120,23 @@ let galleryView: GalleryView = { page: 0, isAll: false }
 
 // What the live pane shows, kept in the session's state: it outlives a reload
 // of this mod, which stops the browser, so the pane can come back by itself.
-const lastLive = atom({ plugin: 'wireframe', key: 'last' } as const, null as WireframeLive | null)
+const lastLive = atom({ plugin: 'ccglimpse', key: 'last' } as const, null as GlimpseLive | null)
 
 // The folder for pictures, pages, the gallery and the live browser.
 async function workDir($: EngineInterface): Promise<string> {
   const home = await $.env.get('HOME')
   if (home === undefined) throw new Error('HOME is not set, so there is nowhere to keep pictures.')
-  const dir = `${home}/.cache/claude-wireframe`
+  const dir = `${home}/.cache/ccglimpse`
   await $.process.run(['mkdir', '-p', '-m', '700', dir, `${dir}/pages`, `${dir}/live`, `${dir}/thumbs`])
   return dir
+}
+
+// Each session's live browser has a folder of its own, named after the
+// session, so two sessions never share a browser, a profile or a socket.
+const FALLBACK_NAME = `p${Date.now().toString(36)}`
+async function liveFolder($: EngineInterface, dir: string): Promise<string> {
+  const id = await $.session.id().catch(() => '')
+  return `${dir}/live/${id.replace(/[^\w-]/g, '').slice(0, 40) || FALLBACK_NAME}`
 }
 
 async function needBrowser($: EngineInterface): Promise<string> {
@@ -167,7 +175,7 @@ type OpenOptions = { kind?: EntryKind; title?: string; link?: string }
 // Opens the live pane on a file or URL, and keeps it in the gallery.
 async function openTarget($: EngineInterface, target: string, device: Device, options: OpenOptions = {}): Promise<string> {
   const dir = await workDir($)
-  const opened = await openLive($, { target, device, browser: await needBrowser($), dir: `${dir}/live` })
+  const opened = await openLive($, { target, device, browser: await needBrowser($), dir: await liveFolder($, dir) })
   await update($, lastLive, () => ({ target, device }))
   const entry = await remember($, dir, {
     kind: options.kind ?? 'live',
@@ -240,7 +248,7 @@ export const register: Register = on => {
   // Tell Claude how to show UI (see ROUTING).
   on('prompt.compose', async ($, e, next) => {
     const { sections } = await next(e)
-    return { sections: [...sections, { id: 'wireframe:routing', text: ROUTING, scope: 'session' as const }] }
+    return { sections: [...sections, { id: 'ccglimpse:routing', text: ROUTING, scope: 'session' as const }] }
   })
 
   // ---- Still pictures -----------------------------------------------------------
@@ -282,7 +290,7 @@ export const register: Register = on => {
     await remember($, dir, { kind: size, title, isNamed: typeof e.title === 'string' && e.title.trim() !== '', page, png, width, height, cwd: projectDir })
     $.ui.invalidate('ui.render')
     return { result: `Rendered and shown to the user inline in the terminal (kept in the gallery as "${title}"). ${resultLine({ png, width, height, size, page })}` }
-  }).catch(() => ({ deny: 'wireframe: the preview failed. Run claude --debug for the reason.' }))
+  }).catch(() => ({ deny: 'CCGlimpse: the preview failed. Run claude --debug for the reason.' }))
 
   // The picture, where the result text would be, with two buttons under it.
   on('ui.render', { component: 'ToolResult', props: { tool: PREVIEW } }, async ($, e, next) => {
@@ -391,7 +399,7 @@ export const register: Register = on => {
     }
     const said = await openTarget($, target, device, { kind: link === undefined ? 'live' : 'artifact', title, link })
     return { result: `${said}${note} The user can click, type and scroll in it. It is kept in the gallery.` }
-  }).catch(() => ({ deny: 'wireframe: the live preview failed. Run claude --debug for the reason.' }))
+  }).catch(() => ({ deny: 'CCGlimpse: the live preview failed. Run claude --debug for the reason.' }))
 
   on('ui.render', { component: 'ToolUse', props: { tool: LIVE } }, ($, e, next) => {
     if (e.props.isExpanded === true) return next(e)

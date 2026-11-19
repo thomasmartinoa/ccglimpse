@@ -13,7 +13,7 @@ import type { EngineInterface, HookStream, ProcessSpawnChunk, ProcessSpawnResult
 import { aspectOf, type Cell } from './cells'
 import { nameFromPage, updateEntry } from './gallery'
 
-export const PANE = 'wireframe-live'
+export const PANE = 'ccglimpse-live'
 
 export type Device = 'desktop' | 'tablet' | 'phone'
 export const DEVICES: Record<Device, { width: number; height: number }> = {
@@ -101,7 +101,7 @@ async function saveThumb($: EngineInterface, current: Live, frame: string) {
 
 async function ask($: EngineInterface, path: string, body: unknown = {}) {
   if (live?.socket === undefined) throw new Error('the live preview is not running')
-  const response = await $.http.fetch(`http://wireframe${path}`, {
+  const response = await $.http.fetch(`http://ccglimpse${path}`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(body),
@@ -116,7 +116,7 @@ async function startHelper($: EngineInterface, browser: string, dir: string): Pr
   const current = live
   if (current === undefined) throw new Error('nothing to show')
   const stream = $.process.spawn({
-    argv: ['node', `${$.plugin.root}/runtime/live-helper.mjs`, `--out=${dir}`, `--chrome=${browser}`],
+    argv: ['node', `${$.plugin.root}/runtime/live-helper.mjs`, `--out=${dir}`, `--chrome=${browser}`, '--sweep'],
   })
   current.stream = stream
 
